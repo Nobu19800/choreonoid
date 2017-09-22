@@ -443,7 +443,6 @@ PYBIND11_NOINLINE inline std::string error_string() {
                 handle(frame->f_code->co_name).cast<std::string>() + "\n";
             frame = frame->f_back;
         }
-        trace = trace->tb_next;
     }
 #endif
 
@@ -483,9 +482,10 @@ inline PyObject *make_new_instance(PyTypeObject *type);
 class type_caster_generic {
 public:
     PYBIND11_NOINLINE type_caster_generic(const std::type_info &type_info)
-     : typeinfo(get_type_info(type_info)) { }
+        : typeinfo(get_type_info(type_info)), cpptype(&type_info) { }
 
-    type_caster_generic(const type_info *typeinfo) : typeinfo(typeinfo) { }
+    type_caster_generic(const type_info *typeinfo)
+        : typeinfo(typeinfo), cpptype(typeinfo ? typeinfo->cpptype : nullptr) { }
 
     bool load(handle src, bool convert) {
         return load_impl<type_caster_generic>(src, convert);
@@ -611,7 +611,7 @@ public:
         type_info *foreign_typeinfo = reinterpret_borrow<capsule>(getattr(pytype, local_key));
         // Only consider this foreign loader if actually foreign and is a loader of the correct cpp type
         if (foreign_typeinfo->module_local_load == &local_load
-                || !same_type(*typeinfo->cpptype, *foreign_typeinfo->cpptype))
+            || (cpptype && !same_type(*cpptype, *foreign_typeinfo->cpptype)))
             return false;
 
         if (auto result = foreign_typeinfo->module_local_load(src.ptr(), foreign_typeinfo)) {
@@ -723,6 +723,7 @@ public:
     }
 
     const type_info *typeinfo = nullptr;
+    const std::type_info *cpptype = nullptr;
     void *value = nullptr;
 };
 
@@ -777,7 +778,7 @@ template <typename T1, typename T2> struct is_copy_constructible<std::pair<T1, T
 template <typename type> class type_caster_base : public type_caster_generic {
     using itype = intrinsic_t<type>;
 public:
-    static PYBIND11_DESCR name() { return type_descr(_<type>()); }
+    static constexpr auto name = _<type>();
 
     type_caster_base() : type_caster_base(typeid(type)) { }
     explicit type_caster_base(const std::type_info &info) : type_caster_generic(info) { }
@@ -884,7 +885,7 @@ private:
             "std::reference_wrapper<T> caster requires T to have a caster with an `T &` operator");
 public:
     bool load(handle src, bool convert) { return subcaster.load(src, convert); }
-    static PYBIND11_DESCR name() { return caster_t::name(); }
+    static constexpr auto name = caster_t::name;
     static handle cast(const std::reference_wrapper<type> &src, return_value_policy policy, handle parent) {
         // It is definitely wrong to take ownership of this pointer, so mask that rvp
         if (policy == return_value_policy::take_ownership || policy == return_value_policy::automatic)
@@ -899,7 +900,7 @@ public:
     protected: \
         type value; \
     public: \
-        static PYBIND11_DESCR name() { return type_descr(py_name); } \
+        static constexpr auto name = py_name; \
         template <typename T_, enable_if_t<std::is_same<type, remove_cv_t<T_>>::value, int> = 0> \
         static handle cast(T_ *src, return_value_policy policy, handle parent) { \
             if (!src) return none().release(); \
@@ -963,9 +964,9 @@ public:
             );
             PyErr_Clear();
             if (type_error && convert && PyNumber_Check(src.ptr())) {
-                auto tmp = reinterpret_borrow<object>(std::is_floating_point<T>::value
-                                                      ? PyNumber_Float(src.ptr())
-                                                      : PyNumber_Long(src.ptr()));
+                auto tmp = reinterpret_steal<object>(std::is_floating_point<T>::value
+                                                     ? PyNumber_Float(src.ptr())
+                                                     : PyNumber_Long(src.ptr()));
                 PyErr_Clear();
                 return load(tmp, false);
             }
@@ -1048,7 +1049,7 @@ public:
 
     template <typename T> using cast_op_type = void*&;
     operator void *&() { return value; }
-    static PYBIND11_DESCR name() { return type_descr(_("capsule")); }
+    static constexpr auto name = _("capsule");
 private:
     void *value = nullptr;
 };
@@ -1288,7 +1289,7 @@ public:
         return value[0];
     }
 
-    static PYBIND11_DESCR name() { return type_descr(_(PYBIND11_STRING_NAME)); }
+    static constexpr auto name = _(PYBIND11_STRING_NAME);
     template <typename _T> using cast_op_type = remove_reference_t<pybind11::detail::cast_op_type<_T>>;
 };
 
@@ -1313,9 +1314,7 @@ public:
         return cast_impl(std::forward<T>(src), policy, parent, indices{});
     }
 
-    static PYBIND11_DESCR name() {
-        return type_descr(_("Tuple[") + detail::concat(make_caster<Ts>::name()...) + _("]"));
-    }
+    static constexpr auto name = _("Tuple[") + concat(make_caster<Ts>::name...) + _("]");
 
     template <typename T> using cast_op_type = type;
 
@@ -1460,7 +1459,7 @@ struct move_only_holder_caster {
         auto *ptr = holder_helper<holder_type>::get(src);
         return type_caster_base<type>::cast_holder(ptr, &src);
     }
-    static PYBIND11_DESCR name() { return type_caster_base<type>::name(); }
+    static constexpr auto name = type_caster_base<type>::name;
 };
 
 template <typename type, typename deleter>
@@ -1491,10 +1490,10 @@ template <typename base, typename holder> struct is_holder_type :
 template <typename base, typename deleter> struct is_holder_type<base, std::unique_ptr<base, deleter>> :
     std::true_type {};
 
-template <typename T> struct handle_type_name { static PYBIND11_DESCR name() { return _<T>(); } };
-template <> struct handle_type_name<bytes> { static PYBIND11_DESCR name() { return _(PYBIND11_BYTES_NAME); } };
-template <> struct handle_type_name<args> { static PYBIND11_DESCR name() { return _("*args"); } };
-template <> struct handle_type_name<kwargs> { static PYBIND11_DESCR name() { return _("**kwargs"); } };
+template <typename T> struct handle_type_name { static constexpr auto name = _<T>(); };
+template <> struct handle_type_name<bytes> { static constexpr auto name = _(PYBIND11_BYTES_NAME); };
+template <> struct handle_type_name<args> { static constexpr auto name = _("*args"); };
+template <> struct handle_type_name<kwargs> { static constexpr auto name = _("**kwargs"); };
 
 template <typename type>
 struct pyobject_caster {
@@ -1512,7 +1511,7 @@ struct pyobject_caster {
     static handle cast(const handle &src, return_value_policy /* policy */, handle /* parent */) {
         return src.inc_ref();
     }
-    PYBIND11_TYPE_CASTER(type, handle_type_name<type>::name());
+    PYBIND11_TYPE_CASTER(type, handle_type_name<type>::name);
 };
 
 template <typename T>
@@ -1800,6 +1799,9 @@ struct function_call {
 
     /// The parent, if any
     handle parent;
+
+    /// If this is a call to an initializer, this argument contains `self`
+    handle init_self;
 };
 
 
@@ -1822,7 +1824,7 @@ public:
     static constexpr bool has_kwargs = kwargs_pos < 0;
     static constexpr bool has_args = args_pos < 0;
 
-    static PYBIND11_DESCR arg_names() { return detail::concat(make_caster<Args>::name()...); }
+    static constexpr auto arg_names = concat(type_descr(make_caster<Args>::name)...);
 
     bool load_args(function_call &call) {
         return load_impl_sequence(call, indices{});

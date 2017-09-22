@@ -7,6 +7,7 @@
 #include "../BodyMotion.h"
 #include "../InverseKinematics.h"
 #include "../JointPath.h"
+#include "../Light.h"
 #include <cnoid/ValueTree>
 #include <cnoid/SceneGraph>
 #include <cnoid/PyReferenced>
@@ -182,6 +183,7 @@ PYBIND11_MODULE(Body, m)
         .def("setVirtualJointForces", &Body::setVirtualJointForces)
         .def_static("addCustomizerDirectory", &Body::addCustomizerDirectory)
         .def(BodyMotion::Frame() >> py::self)
+		.def("getLight", &Body::findDevice<Light>)
         ;
 
     py::class_<ExtraJoint> extraJoint(m, "ExtraJoint");
@@ -265,5 +267,12 @@ PYBIND11_MODULE(Body, m)
         .def("link", (Link*(Device::*)())&Device::link)
         .def_property("T_local", [](Device& self) ->Position { return self.T_local(); },
                       [](Device& self, const Position& T) { self.T_local() = T.matrix(); })
+        ;
+    py::class_<Light, LightPtr, Referenced>(m, "Light")
+        .def_property("on", (bool(Light::*)()const)&Light::on, [](Light& self, bool on){ self.on(on); })
+        .def_property("setColor", (void(Light::*)(const Vector3f&))&Light::setColor, [](Light& self, float r, float g, float b){ self.setColor(Vector3f(r,g,b)); })
+		.def("color", &Light::color)
+        .def("intensity", &Light::intensity)
+        .def("setIntensity", &Light::setIntensity)
         ;
 }

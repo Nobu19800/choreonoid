@@ -227,7 +227,7 @@ bool PythonPlugin::initializeInterpreter()
 	*/	
 #ifdef WIN32
     python::module env = python::module::import("os").attr("environ");
-    env["PATH"] = python::str(executableDirectory() + ";") + env["PATH"];
+    env["PATH"] = std::string(python::str(executableDirectory() + ";")) + std::string(env["PATH"].str());
 #endif
 
     sysModule = python::module::import("sys");
@@ -370,12 +370,15 @@ python::module getMainModule()
     return pythonPlugin->mainModule;
 }
 
+
+CNOID_EXPORT python::object getGlobalNamespace();
+
 python::object getGlobalNamespace()
 {
     return pythonPlugin->globalNamespace;
 }
 
-python::object getSysModule()
+python::module getSysModule()
 {
     return pythonPlugin->sysModule;
 }

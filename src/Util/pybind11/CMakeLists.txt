@@ -22,5 +22,5 @@ add_cnoid_python_module(PyUtil
   PyTask.cpp
   )
 
-target_link_libraries(PyUtil CnoidUtil CnoidPyUtil)
+target_link_libraries(PyUtil CnoidUtil)
 apply_common_setting_for_python_module(PyUtil)
