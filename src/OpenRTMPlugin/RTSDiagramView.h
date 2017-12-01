@@ -7,14 +7,17 @@
 #define CNOID_OPENRTM_PLUGIN_RTS_DIAGRAM_VIEW_H_INCLUDED
 
 #include <cnoid/View>
+#include <cnoid/CorbaUtil>
+#include "exportdecl.h"
 
 using namespace cnoid;
 
 namespace cnoid 
 {
 class RTSDiagramViewImpl;
+class RTSComp;
 
-class RTSDiagramView : public View
+class CNOID_EXPORT RTSDiagramView : public View
 {
     Q_OBJECT
 
@@ -26,6 +29,7 @@ public:
     virtual ~RTSDiagramView();
 
     void updateView();
+	SignalProxy<void(RTSComp*)> sigDoubleClickEvent();
 
 public Q_SLOTS:
     void onRTSCompSelectionChange();

@@ -283,6 +283,7 @@ public:
     void mouseMoveEvent   (QMouseEvent*     event);
     void mousePressEvent  (QMouseEvent*     event);
     void mouseReleaseEvent(QMouseEvent*     event);
+	void mouseDoubleClickEvent(QMouseEvent*     event);
     void keyPressEvent    (QKeyEvent*       event);
     void onnsViewItemSelectionChanged(const list<NamingContextHelper::ObjectInfo>& items);
     RTSPortGItem* findTargetRTSPort(QPointF& pos);
@@ -296,6 +297,7 @@ public:
     void onRTSystemItemDetachedFromRoot();
     void setCurrentRTSItem(RTSystemItem* item);
     void updateView();
+	Signal<void(RTSComp*)> sigDoubleClickEvent;
 };
 
 }
@@ -875,6 +877,26 @@ void RTSDiagramViewImpl::mouseMoveEvent(QMouseEvent* event)
     QGraphicsView::mouseMoveEvent(event);
 }
 
+void RTSDiagramViewImpl::mouseDoubleClickEvent(QMouseEvent* event)
+{
+	if (event->button() == Qt::LeftButton) {
+		
+
+		if (!selectionRTCs.empty()) {
+			
+			sigDoubleClickEvent(selectionRTCs.front()->rtsComp);
+		}
+
+	}
+	
+	QGraphicsView::mouseDoubleClickEvent(event);
+}
+
+SignalProxy<void(RTSComp*)> RTSDiagramView::sigDoubleClickEvent()
+{
+	return impl->sigDoubleClickEvent;
+}
+
 
 void RTSDiagramViewImpl::keyPressEvent(QKeyEvent *event)
 {
@@ -1189,6 +1211,7 @@ void RTSDiagramViewImpl::createConnectionGItem(RTSConnection* rtsConnection,
 
 void RTSDiagramViewImpl::onRTSCompSelectionChange()
 {
+	
     RTSCompGItem* singleSelectedRTC = 0;
     if(selectionRTCs.size()==1)
         singleSelectedRTC = selectionRTCs.front();
